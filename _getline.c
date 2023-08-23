@@ -1,106 +1,96 @@
-#include "simishell.h"
+#include "shell.h"
 
 /**
- * _getchar - a function that reads a character from the standard input
- *
- * Return: returns the read character
- */
-
-char _getchar(void)
+* _getline - read one line from the prompt.
+* @data: struct for the program's data
+*
+* Return: reading counting bytes.
+*/
+int _getline(data_of_program *data)
 {
-char *buf;
-char c;
-int i = 0;
+	char buff[BUFFER_SIZE] = {'\0'};
+	static char *array_commands[10] = {NULL};
+	static char array_operators[10] = {'\0'};
+	ssize_t bytes_read, i = 0;
 
-buf = malloc(2);
+	/* check if doesnot exist more commands in the array */
+	/* and checks the logical operators */
+	if (!array_commands[0] || (array_operators[0] == '&' && errno != 0) ||
+		(array_operators[0] == '|' && errno == 0))
+	{
+		/*free the memory allocated in the array if it exists */
+		for (i = 0; array_commands[i]; i++)
+		{
+			free(array_commands[i]);
+			array_commands[i] = NULL;
+		}
 
-if (!buf)
-return (-1);
+		/* read from the file descriptor int to buff */
+		bytes_read = read(data->file_descriptor, &buff, BUFFER_SIZE - 1);
+		if (bytes_read == 0)
+			return (-1);
 
-fflush(stdout);
+		/* split lines for \n or ; */
+		i = 0;
+		do {
+			array_commands[i] = str_duplicate(_strtok(i ? NULL : buff, "\n;"));
+			/*checks and split for && and || operators*/
+			i = check_logic_ops(array_commands, i, array_operators);
+		} while (array_commands[i++]);
+	}
 
-i = read(1, buf, 1);
-if (i == -1)
-{
-perror("Reading Char");
-return (-1);
+	/*obtains the next command (command 0) and remove it for the array*/
+	data->input_line = array_commands[0];
+	for (i = 0; array_commands[i]; i++)
+	{
+		array_commands[i] = array_commands[i + 1];
+		array_operators[i] = array_operators[i + 1];
+	}
+
+	return (str_length(data->input_line));
 }
-else if (i == 0)
-{
-write(1, "\n", 2);
-fflush(stdout);
-exit(1);
-}
 
-c = *buf;
-
-return (c);
-}
 
 /**
- * _getline - a function to read a line from the standard input
- * @line: a pointer to a pointer of location to save the string
- * @len: the size of the characters read
- *
- * Return: returns the size of the read string
- */
-
-int _getline(char **line, size_t *len)
+* check_logic_ops - checks and split for && and || operators
+* @array_commands: array of the commands.
+* @i: index in the array_commands to be checked
+* @array_operators: array of the logical operators for each previous command
+*
+* Return: index of the last command in the array_commands.
+*/
+int check_logic_ops(char *array_commands[], int i, char array_operators[])
 {
-size_t limit = 25;
-char *tmp;
+	char *temp = NULL;
+	int j;
 
-line[0] = malloc(25);
-if (!line[0])
-return (-1);
-*len = 0;
-
-while (line[0][*len - 1] != '\n')
-{
-line[0][*len] = _getchar();
-*len += 1;
-
-if (*len > (limit - 3))
-{
-tmp = realloc(line[0], limit + 10);
-if (tmp)
-line[0] = tmp;
-else
-perror("Reallocation");
-limit += 10;
-}
-}
-
-return (*len);
-}
-
-/**
- * echoer - a function to echo back any text you gave it
- * @line: an array of command and arguments
- *
- * Return: returns 1 in success and -1 if it fails
- */
-
-int echoer(char *line[])
-{
-int i = 1;
-
-if (line[i] == NULL)
-{
-write(1, "\n", 2);
-return (1);
-}
-
-while (line[i] != NULL)
-{
-write(1, line[i], strleng(line[i]));
-i++;
-if (line[i] != NULL)
-{
-write(1, " ", 2);
-}
-}
-write(1, "\n", 2);
-
-return (1);
+	/* checks for the & char in the command line*/
+	for (j = 0; array_commands[i] != NULL  && array_commands[i][j]; j++)
+	{
+		if (array_commands[i][j] == '&' && array_commands[i][j + 1] == '&')
+		{
+			/* split the line when chars && was found */
+			temp = array_commands[i];
+			array_commands[i][j] = '\0';
+			array_commands[i] = str_duplicate(array_commands[i]);
+			array_commands[i + 1] = str_duplicate(temp + j + 2);
+			i++;
+			array_operators[i] = '&';
+			free(temp);
+			j = 0;
+		}
+		if (array_commands[i][j] == '|' && array_commands[i][j + 1] == '|')
+		{
+			/* split the line when chars || was found */
+			temp = array_commands[i];
+			array_commands[i][j] = '\0';
+			array_commands[i] = str_duplicate(array_commands[i]);
+			array_commands[i + 1] = str_duplicate(temp + j + 2);
+			i++;
+			array_operators[i] = '|';
+			free(temp);
+			j = 0;
+		}
+	}
+	return (i);
 }
